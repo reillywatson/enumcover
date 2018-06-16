@@ -1,0 +1,11 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.10.3
+    working_directory: /go/src/github.com/reillywatson/enumcover
+    steps:
+      - checkout
+      - run: go get honnef.co/go/tools
+      - run: go test github.com/reillywatson/enumcover
+
