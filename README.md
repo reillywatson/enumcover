@@ -1,4 +1,5 @@
 [![CircleCI](https://circleci.com/gh/reillywatson/enumcover.svg?style=svg)](https://circleci.com/gh/reillywatson/enumcover)
+[![codecov](https://codecov.io/gh/reillywatson/enumcover/branch/master/graph/badge.svg)](https://codecov.io/gh/reillywatson/enumcover)
 
 enumcover is a linter for Go to check if a piece of code handles all versions of an enum.
 
