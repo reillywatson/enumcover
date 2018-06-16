@@ -1,7 +1,9 @@
 package enumcover
 
 import (
+	"fmt"
 	"go/ast"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -24,6 +26,8 @@ func (*checker) Funcs() map[string]lint.Func {
 	}
 }
 
+var commentRegex = regexp.MustCompile(`handleall:([\w\.]+)`)
+
 func enumcoverCheck(j *lint.Job) {
 	for _, file := range j.Program.Files {
 		commentMap := ast.NewCommentMap(j.Program.SSA.Fset, file, file.Comments)
@@ -33,12 +37,10 @@ func enumcoverCheck(j *lint.Job) {
 			}
 			for _, comments := range commentMap[n] {
 				for _, comment := range comments.List {
-					if strings.HasPrefix(strings.TrimSpace(comment.Text), "//handleall:") {
-						parts := strings.Split(comment.Text, ":")
-						if len(parts) == 2 {
-							typeName := fullTypeName(j, file, n, strings.TrimSpace(parts[1]))
-							checkConsts(j, n, typeName)
-						}
+					matches := commentRegex.FindAllStringSubmatch(comment.Text, 1)
+					if len(matches) == 1 && len(matches[0]) == 2 {
+						typeName := fullTypeName(j, file, n, strings.TrimSpace(matches[0][1]))
+						checkConsts(j, n, typeName)
 					}
 				}
 			}
@@ -75,9 +77,6 @@ func fullTypeName(j *lint.Job, file *ast.File, n ast.Node, typeName string) stri
 
 func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 	namesForType := map[string]bool{}
-	for _, c := range allConstsWithType(j, typeName) {
-		namesForType[c] = false
-	}
 	ast.Inspect(n, func(n ast.Node) bool {
 		if expr, ok := n.(ast.Expr); ok {
 			t := j.Program.Info.TypeOf(expr)
@@ -86,23 +85,27 @@ func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 				case *ast.BasicLit:
 					namesForType[unquote(n.Value)] = true
 				case *ast.Ident:
-					if n.Obj != nil && n.Obj.Kind == ast.Con {
-						if decl, ok := n.Obj.Decl.(*ast.ValueSpec); ok {
-							for _, value := range decl.Values {
-								if lit, ok := value.(*ast.BasicLit); ok {
-									namesForType[unquote(lit.Value)] = true
+					if n.Obj != nil {
+						if n.Obj.Kind == ast.Con {
+							if decl, ok := n.Obj.Decl.(*ast.ValueSpec); ok {
+								for _, value := range decl.Values {
+									if lit, ok := value.(*ast.BasicLit); ok {
+										namesForType[unquote(lit.Value)] = true
+									}
 								}
 							}
 						}
+					} else {
+						namesForType[n.Name] = true
 					}
 				}
 			}
 		}
 		return true
 	})
-	for k, v := range namesForType {
-		if !v {
-			j.Errorf(n, "Unhandled const: %s", k)
+	for _, want := range allConstsWithType(j, typeName) {
+		if !namesForType[want.name] && !namesForType[want.val] {
+			j.Errorf(n, "Unhandled const: %v", want)
 		}
 	}
 }
@@ -114,15 +117,24 @@ func unquote(str string) string {
 	return str
 }
 
-func allConstsWithType(j *lint.Job, targetType string) []string {
-	consts := []string{}
+type constVal struct {
+	name string
+	val  string
+}
+
+func (c constVal) String() string {
+	return fmt.Sprintf("%s (%s)", c.name, c.val)
+}
+
+func allConstsWithType(j *lint.Job, targetType string) []constVal {
+	consts := []constVal{}
 	for _, pkg := range j.Program.SSA.AllPackages() {
 		for _, member := range pkg.Members {
 			if namedConst, ok := member.(*ssa.NamedConst); ok {
 				val := unquote(namedConst.Value.Value.ExactString())
 				typeName := namedConst.Type().String()
 				if typeName == targetType {
-					consts = append(consts, val)
+					consts = append(consts, constVal{name: namedConst.Name(), val: val})
 				}
 			}
 		}
