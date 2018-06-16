@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/reillywatson/enumcover.svg?style=svg)](https://circleci.com/gh/reillywatson/enumcover)
+
 enumcover is a linter for Go to check if a piece of code handles all versions of an enum.
 
 Background: Go enums are typically defined either as ints, or as strings. Here's an example from the Go reflect package:
