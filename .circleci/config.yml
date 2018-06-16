@@ -6,6 +6,6 @@ jobs:
     working_directory: /go/src/github.com/reillywatson/enumcover
     steps:
       - checkout
-      - run: go get honnef.co/go/tools
+      - run: go get honnef.co/go/tools/...
       - run: go test github.com/reillywatson/enumcover
 
