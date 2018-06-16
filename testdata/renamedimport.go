@@ -4,7 +4,7 @@ import (
 	ref "reflect"
 )
 
-//handleall:ref.Kind
+//enumcover:ref.Kind
 func HandleKinds(k ref.Kind) bool {
 	switch k {
 	case ref.Invalid:
@@ -42,7 +42,7 @@ func HandleKinds(k ref.Kind) bool {
 
 // MATCH:46 "Unhandled const: Invalid (0)"
 
-//handleall:ref.Kind
+//enumcover:ref.Kind
 func HandleKindsMinusInvalid(k ref.Kind) bool {
 	switch k {
 	case ref.Bool:

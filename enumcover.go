@@ -26,7 +26,7 @@ func (*checker) Funcs() map[string]lint.Func {
 	}
 }
 
-var commentRegex = regexp.MustCompile(`handleall:([\w\.]+)`)
+var commentRegex = regexp.MustCompile(`enumcover:([\w\.]+)`)
 
 func enumcoverCheck(j *lint.Job) {
 	for _, file := range j.Program.Files {

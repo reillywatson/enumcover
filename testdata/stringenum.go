@@ -8,16 +8,16 @@ const (
 	MyEnumC MyEnum = "c"
 )
 
-//handleall:MyEnum
+//enumcover:MyEnum
 var All = []MyEnum{MyEnumA, MyEnumB, MyEnumC}
 
 // MATCH:18 "Unhandled const: MyEnumB (b)"
 // MATCH:18 "Unhandled const: MyEnumC (c)"
 
-//handleall:MyEnum
+//enumcover:MyEnum
 var Some = []MyEnum{MyEnumA}
 
-//handleall:MyEnum
+//enumcover:MyEnum
 func HandleAll(e MyEnum) bool {
 	switch e {
 	case MyEnumA, MyEnumB, MyEnumC:
@@ -28,7 +28,7 @@ func HandleAll(e MyEnum) bool {
 
 // MATCH:32 "Unhandled const: MyEnumC (c)"
 
-//handleall:MyEnum
+//enumcover:MyEnum
 func HandleSome(e MyEnum) bool {
 	switch e {
 	case MyEnumA, MyEnumB:
@@ -39,7 +39,7 @@ func HandleSome(e MyEnum) bool {
 
 // MATCH:43 "Unhandled const: MyEnumC (c)"
 
-//handleall:MyEnum
+//enumcover:MyEnum
 func HandleSomeWithIfs(e MyEnum) bool {
 	if e == MyEnumA {
 		return true

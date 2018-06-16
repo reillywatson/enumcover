@@ -4,7 +4,7 @@ import (
 	"reflect"
 )
 
-//handleall:reflect.Kind
+//enumcover:reflect.Kind
 func HandleKinds(k reflect.Kind) bool {
 	switch k {
 	case reflect.Invalid:
