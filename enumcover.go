@@ -95,9 +95,8 @@ func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 								}
 							}
 						}
-					} else {
-						namesForType[n.Name] = true
 					}
+					namesForType[n.Name] = true
 				}
 			}
 		}
