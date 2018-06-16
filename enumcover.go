@@ -1,7 +1,6 @@
 package enumcover
 
 import (
-	"fmt"
 	"go/ast"
 	"strconv"
 	"strings"
@@ -101,7 +100,6 @@ func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 		}
 		return true
 	})
-	fmt.Println(namesForType)
 	for k, v := range namesForType {
 		if !v {
 			j.Errorf(n, "Unhandled const: %s", k)
