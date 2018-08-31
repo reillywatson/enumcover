@@ -6,5 +6,6 @@ jobs:
     working_directory: /go/src/github.com/reillywatson/enumcover
     steps:
       - checkout
+      - run: go list
       - run: go test -race -coverprofile=coverage.txt -covermode=atomic
       - run: bash <(curl -s https://codecov.io/bash)
