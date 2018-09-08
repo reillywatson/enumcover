@@ -20,9 +20,9 @@ type checker struct{}
 func (*checker) Init(*lint.Program) {}
 func (*checker) Name() string       { return "enumcover" }
 func (*checker) Prefix() string     { return "enumcover" }
-func (*checker) Funcs() map[string]lint.Func {
-	return map[string]lint.Func{
-		"enumcover001": enumcoverCheck,
+func (c *checker) Checks() []lint.Check {
+	return []lint.Check{
+		{ID: "enumcover001", FilterGenerated: false, Fn: enumcoverCheck},
 	}
 }
 
@@ -70,7 +70,7 @@ func fullTypeName(j *lint.Job, file *ast.File, n ast.Node, typeName string) stri
 		}
 	} else {
 		pkg := j.NodePackage(n)
-		typeName = pkg.Pkg.Path() + "." + typeName
+		typeName = pkg.SSA.Pkg.Path() + "." + typeName
 	}
 	return typeName
 }
@@ -79,7 +79,7 @@ func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 	namesForType := map[string]bool{}
 	ast.Inspect(n, func(n ast.Node) bool {
 		if expr, ok := n.(ast.Expr); ok {
-			t := j.Program.Info.TypeOf(expr)
+			t := j.NodePackage(expr).TypesInfo.TypeOf(expr)
 			if t != nil && t.String() == typeName {
 				switch n := n.(type) {
 				case *ast.BasicLit:

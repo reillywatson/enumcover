@@ -1,7 +1,7 @@
 module github.com/reillywatson/enumcover
 
 require (
-	github.com/kisielk/gotool v1.0.0 // indirect
-	golang.org/x/tools v0.0.0-20180830214440-4bc20fc7916b // indirect
-	honnef.co/go/tools v0.0.0-20180728063816-88497007e858
+	github.com/BurntSushi/toml v0.3.0 // indirect
+	golang.org/x/tools v0.0.0-20180904205237-0aa4b8830f48 // indirect
+	honnef.co/go/tools v0.0.0-20180906060842-607fff725701
 )

@@ -4,12 +4,16 @@ import (
 	"os"
 
 	"github.com/reillywatson/enumcover"
+	"honnef.co/go/tools/lint"
 	"honnef.co/go/tools/lint/lintutil"
 )
 
 func main() {
-	checkers := []lintutil.CheckerConfig{
-		{Checker: enumcover.NewChecker(), ExitNonZero: true},
+	fs := lintutil.FlagSet("enumcover")
+	fs.Parse(os.Args[1:])
+
+	checkers := []lint.Checker{
+		enumcover.NewChecker(),
 	}
-	lintutil.ProcessArgs("enumcover", checkers, os.Args[1:])
+	lintutil.ProcessFlagSet(checkers, fs)
 }
