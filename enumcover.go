@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/lint/lintdsl"
 	"honnef.co/go/tools/ssa"
 )
 
@@ -20,9 +21,9 @@ type checker struct{}
 func (*checker) Init(*lint.Program) {}
 func (*checker) Name() string       { return "enumcover" }
 func (*checker) Prefix() string     { return "enumcover" }
-func (c *checker) Checks() []lint.Check {
+func (*checker) Checks() []lint.Check {
 	return []lint.Check{
-		{ID: "enumcover001", FilterGenerated: false, Fn: enumcoverCheck},
+		{ID: "enumcover001", Fn: enumcoverCheck},
 	}
 }
 
@@ -79,7 +80,7 @@ func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 	namesForType := map[string]bool{}
 	ast.Inspect(n, func(n ast.Node) bool {
 		if expr, ok := n.(ast.Expr); ok {
-			t := j.NodePackage(expr).TypesInfo.TypeOf(expr)
+			t := lintdsl.TypeOf(j, expr)
 			if t != nil && t.String() == typeName {
 				switch n := n.(type) {
 				case *ast.BasicLit:
@@ -102,7 +103,11 @@ func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 		}
 		return true
 	})
-	for _, want := range allConstsWithType(j, typeName) {
+	allConsts := allConstsWithType(j, typeName)
+	if len(allConsts) == 0 {
+		j.Errorf(n, "No consts found for type %v", typeName)
+	}
+	for _, want := range allConsts {
 		if !namesForType[want.name] && !namesForType[want.val] {
 			j.Errorf(n, "Unhandled const: %v", want)
 		}

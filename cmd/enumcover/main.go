@@ -15,5 +15,6 @@ func main() {
 	checkers := []lint.Checker{
 		enumcover.NewChecker(),
 	}
+
 	lintutil.ProcessFlagSet(checkers, fs)
 }
