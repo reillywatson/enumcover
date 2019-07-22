@@ -129,26 +129,24 @@ func (c constVal) String() string {
 	return fmt.Sprintf("%s (%s)", c.name, c.val)
 }
 
-var allPkgs = map[*types.Package]struct{}{}
-var mu sync.Mutex
+var allPkgs sync.Map
 
 // TODO: do this by storing analysis.Facts about all the consts in each package?
 func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
-	mu.Lock()
 	var visit func(pkg *types.Package)
 	visit = func(pkg *types.Package) {
-		if _, ok := allPkgs[pkg]; ok {
+		if _, ok := allPkgs.Load(pkg); ok {
 			return
 		}
-		allPkgs[pkg] = struct{}{}
+		allPkgs.Store(pkg, struct{}{})
 		for _, imp := range pkg.Imports() {
 			visit(imp)
 		}
 	}
 	visit(pass.Pkg)
-	mu.Unlock()
 	consts := []constVal{}
-	for pkg := range allPkgs {
+	allPkgs.Range(func(pkgKey, _ interface{}) bool {
+		pkg := pkgKey.(*types.Package)
 		for _, name := range pkg.Scope().Names() {
 			if namedConst, ok := pkg.Scope().Lookup(name).(*types.Const); ok {
 				val := unquote(namedConst.Val().ExactString())
@@ -158,6 +156,7 @@ func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
 				}
 			}
 		}
-	}
+		return true
+	})
 	return consts
 }
