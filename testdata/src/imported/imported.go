@@ -41,7 +41,7 @@ func HandleKinds(k reflect.Kind) bool {
 }
 
 //enumcover:Kind
-func HandleKindsWithUnqualifiedEnumcoverDirective(k reflect.Kind) bool {
+func HandleKindsWithUnqualifiedEnumcoverDirective(k reflect.Kind) bool { // want "No consts found for type imported.Kind"
 	switch k {
 	case reflect.Invalid:
 	case reflect.Bool:
@@ -75,5 +75,3 @@ func HandleKindsWithUnqualifiedEnumcoverDirective(k reflect.Kind) bool {
 	}
 	return true
 }
-
-// MATCH:44 "No consts found for type imported.go.Kind"

@@ -3,35 +3,29 @@ package enumcover
 import (
 	"fmt"
 	"go/ast"
+	"go/types"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
-	"honnef.co/go/tools/lint"
-	"honnef.co/go/tools/lint/lintdsl"
-	"honnef.co/go/tools/ssa"
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
-func NewChecker() lint.Checker {
-	return &checker{}
+const Doc = `check that code blocks cover all consts of a given type`
+
+var Analyzer = &analysis.Analyzer{
+	Doc:      Doc,
+	Name:     "enumcover",
+	Run:      enumcoverCheck,
+	Requires: []*analysis.Analyzer{inspect.Analyzer},
 }
-
-type checker struct{}
-
-func (*checker) Init(*lint.Program) {}
-func (*checker) Name() string       { return "enumcover" }
-func (*checker) Prefix() string     { return "enumcover" }
-func (*checker) Checks() []lint.Check {
-	return []lint.Check{
-		{ID: "enumcover001", Fn: enumcoverCheck},
-	}
-}
-
 var commentRegex = regexp.MustCompile(`enumcover:([\w\.]+)`)
 
-func enumcoverCheck(j *lint.Job) {
-	for _, file := range j.Program.Files {
-		commentMap := ast.NewCommentMap(j.Program.SSA.Fset, file, file.Comments)
+func enumcoverCheck(pass *analysis.Pass) (interface{}, error) {
+	for _, file := range pass.Files {
+		commentMap := ast.NewCommentMap(pass.Fset, file, file.Comments)
 		ast.Inspect(file, func(n ast.Node) bool {
 			if n == nil {
 				return true
@@ -40,17 +34,18 @@ func enumcoverCheck(j *lint.Job) {
 				for _, comment := range comments.List {
 					matches := commentRegex.FindAllStringSubmatch(comment.Text, 1)
 					if len(matches) == 1 && len(matches[0]) == 2 {
-						typeName := fullTypeName(j, file, n, strings.TrimSpace(matches[0][1]))
-						checkConsts(j, n, typeName)
+						typeName := fullTypeName(pass, file, n, strings.TrimSpace(matches[0][1]))
+						checkConsts(pass, n, typeName)
 					}
 				}
 			}
 			return true
 		})
 	}
+	return nil, nil
 }
 
-func fullTypeName(j *lint.Job, file *ast.File, n ast.Node, typeName string) string {
+func fullTypeName(pass *analysis.Pass, file *ast.File, n ast.Node, typeName string) string {
 	selectorParts := strings.Split(typeName, ".")
 	if len(selectorParts) == 2 {
 		for _, fimport := range file.Imports {
@@ -58,7 +53,7 @@ func fullTypeName(j *lint.Job, file *ast.File, n ast.Node, typeName string) stri
 			if fimport.Name != nil {
 				if fimport.Name.Name == "." {
 					// TODO: handle dot imports
-					j.Errorf(n, "Dot imports are unhandled!")
+					reportNodef(pass, n, "Dot imports are unhandled!")
 				}
 				pkgName = fimport.Name.Name
 			} else {
@@ -70,17 +65,16 @@ func fullTypeName(j *lint.Job, file *ast.File, n ast.Node, typeName string) stri
 			}
 		}
 	} else {
-		pkg := j.NodePackage(n)
-		typeName = pkg.SSA.Pkg.Path() + "." + typeName
+		typeName = pass.Pkg.Path() + "." + typeName
 	}
 	return typeName
 }
 
-func checkConsts(j *lint.Job, n ast.Node, typeName string) {
+func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
 	namesForType := map[string]bool{}
 	ast.Inspect(n, func(n ast.Node) bool {
 		if expr, ok := n.(ast.Expr); ok {
-			t := lintdsl.TypeOf(j, expr)
+			t := pass.TypesInfo.TypeOf(expr)
 			if t != nil && t.String() == typeName {
 				switch n := n.(type) {
 				case *ast.BasicLit:
@@ -103,15 +97,20 @@ func checkConsts(j *lint.Job, n ast.Node, typeName string) {
 		}
 		return true
 	})
-	allConsts := allConstsWithType(j, typeName)
+	allConsts := allConstsWithType(pass, typeName)
 	if len(allConsts) == 0 {
-		j.Errorf(n, "No consts found for type %v", typeName)
+		reportNodef(pass, n, "No consts found for type %v", typeName)
 	}
 	for _, want := range allConsts {
 		if !namesForType[want.name] && !namesForType[want.val] {
-			j.Errorf(n, "Unhandled const: %v", want)
+			reportNodef(pass, n, "Unhandled const: %v", want)
 		}
 	}
+}
+
+func reportNodef(pass *analysis.Pass, node ast.Node, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	pass.Report(analysis.Diagnostic{Pos: node.Pos(), End: node.End(), Message: msg})
 }
 
 func unquote(str string) string {
@@ -130,12 +129,29 @@ func (c constVal) String() string {
 	return fmt.Sprintf("%s (%s)", c.name, c.val)
 }
 
-func allConstsWithType(j *lint.Job, targetType string) []constVal {
+var allPkgs = map[*types.Package]struct{}{}
+var mu sync.Mutex
+
+// TODO: do this by storing analysis.Facts about all the consts in each package?
+func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
+	mu.Lock()
+	var visit func(pkg *types.Package)
+	visit = func(pkg *types.Package) {
+		if _, ok := allPkgs[pkg]; ok {
+			return
+		}
+		allPkgs[pkg] = struct{}{}
+		for _, imp := range pkg.Imports() {
+			visit(imp)
+		}
+	}
+	visit(pass.Pkg)
+	mu.Unlock()
 	consts := []constVal{}
-	for _, pkg := range j.Program.SSA.AllPackages() {
-		for _, member := range pkg.Members {
-			if namedConst, ok := member.(*ssa.NamedConst); ok {
-				val := unquote(namedConst.Value.Value.ExactString())
+	for pkg := range allPkgs {
+		for _, name := range pkg.Scope().Names() {
+			if namedConst, ok := pkg.Scope().Lookup(name).(*types.Const); ok {
+				val := unquote(namedConst.Val().ExactString())
 				typeName := namedConst.Type().String()
 				if typeName == targetType {
 					consts = append(consts, constVal{name: namedConst.Name(), val: val})

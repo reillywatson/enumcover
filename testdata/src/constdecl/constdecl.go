@@ -13,9 +13,7 @@ var AllBars = []MyBar{
 	MyA, MyB, MyC,
 }
 
-// MATCH:19 "Unhandled const: MyC (c)"
-
 //enumcover:MyBar
-var SomeBars = []MyBar{
+var SomeBars = []MyBar{ // want `Unhandled const: MyC \(c\)`
 	MyA, "b",
 }

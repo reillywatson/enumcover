@@ -1,11 +1,13 @@
-package enumcover
+package enumcover_test
 
 import (
 	"testing"
 
-	"honnef.co/go/tools/lint/testutil"
+	"github.com/reillywatson/enumcover"
+	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-func TestAll(t *testing.T) {
-	testutil.TestAll(t, NewChecker(), "")
+func Test(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, enumcover.Analyzer, "constdecl", "imported", "renamedimport", "stringenum")
 }

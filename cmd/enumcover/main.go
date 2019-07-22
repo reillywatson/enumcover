@@ -1,20 +1,8 @@
 package main
 
 import (
-	"os"
-
 	"github.com/reillywatson/enumcover"
-	"honnef.co/go/tools/lint"
-	"honnef.co/go/tools/lint/lintutil"
+	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
-func main() {
-	fs := lintutil.FlagSet("enumcover")
-	fs.Parse(os.Args[1:])
-
-	checkers := []lint.Checker{
-		enumcover.NewChecker(),
-	}
-
-	lintutil.ProcessFlagSet(checkers, fs)
-}
+func main() { singlechecker.Main(enumcover.Analyzer) }

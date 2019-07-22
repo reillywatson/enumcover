@@ -40,10 +40,8 @@ func HandleKinds(k ref.Kind) bool {
 	return true
 }
 
-// MATCH:46 "Unhandled const: Invalid (0)"
-
 //enumcover:ref.Kind
-func HandleKindsMinusInvalid(k ref.Kind) bool {
+func HandleKindsMinusInvalid(k ref.Kind) bool { // want `Unhandled const: Invalid \(0\)`
 	switch k {
 	case ref.Bool:
 	case ref.Int:

@@ -1,6 +1,3 @@
-[![CircleCI](https://circleci.com/gh/reillywatson/enumcover.svg?style=svg)](https://circleci.com/gh/reillywatson/enumcover)
-[![codecov](https://codecov.io/gh/reillywatson/enumcover/branch/master/graph/badge.svg)](https://codecov.io/gh/reillywatson/enumcover)
-
 enumcover is a linter for Go to check if a piece of code handles all versions of an enum.
 
 Background: Go enums are typically defined either as ints, or as strings. Here's an example from the Go reflect package:
@@ -57,6 +54,6 @@ const (
 )
 ```
 
-You might have a function that tries to deal with one of these enums. It would be nice to know that your code is guaranteed to handle all the possible values of it, even if more get added! Enter enumcover.
+You might have a function that tries to deal with one of these enums. It would be nice to know that your code is guaranteed to handle all the possible values of it, even if more get added! Enter enumcheck.
 
 Simply prepend your function (or switch statement, or slice, or whatever) with a comment like // enumcover:HttpVerb, and this will check that all consts of that type are explicitly handled.
