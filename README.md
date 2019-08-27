@@ -54,6 +54,6 @@ const (
 )
 ```
 
-You might have a function that tries to deal with one of these enums. It would be nice to know that your code is guaranteed to handle all the possible values of it, even if more get added! Enter enumcheck.
+You might have a function that tries to deal with one of these enums. It would be nice to know that your code is guaranteed to handle all the possible values of it, even if more get added! Enter enumcover.
 
 Simply prepend your function (or switch statement, or slice, or whatever) with a comment like // enumcover:HttpVerb, and this will check that all consts of that type are explicitly handled.
