@@ -23,6 +23,11 @@ var Analyzer = &analysis.Analyzer{
 }
 var commentRegex = regexp.MustCompile(`enumcover:([\w\.]+)`)
 
+// Keep a map of renamed constants, where key => old name and value => new name
+var renamedConstants = map[string]string{
+	"Ptr": "Pointer",
+}
+
 func enumcoverCheck(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
 		commentMap := ast.NewCommentMap(pass.Fset, file, file.Comments)
@@ -91,7 +96,12 @@ func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
 							}
 						}
 					}
+
 					namesForType[n.Name] = true
+					if renamedConstants[n.Name] != "" {
+						newName := renamedConstants[n.Name]
+						namesForType[newName] = true
+					}
 				}
 			}
 		}
