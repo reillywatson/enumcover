@@ -23,11 +23,6 @@ var Analyzer = &analysis.Analyzer{
 }
 var commentRegex = regexp.MustCompile(`enumcover:([\w\.]+)`)
 
-// Keep a map of renamed constants, where key => old name and value => new name
-var renamedConstants = map[string]string{
-	"Ptr": "Pointer",
-}
-
 func enumcoverCheck(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
 		commentMap := ast.NewCommentMap(pass.Fset, file, file.Comments)
@@ -76,6 +71,7 @@ func fullTypeName(pass *analysis.Pass, file *ast.File, n ast.Node, typeName stri
 }
 
 func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
+	constMap := buildConstMap(pass, typeName)
 	namesForType := map[string]bool{}
 	ast.Inspect(n, func(n ast.Node) bool {
 		if expr, ok := n.(ast.Expr); ok {
@@ -92,15 +88,19 @@ func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
 									if lit, ok := value.(*ast.BasicLit); ok {
 										namesForType[unquote(lit.Value)] = true
 									}
+									if lit, ok := value.(*ast.Ident); ok {
+										namesForType[lit.Name] = true
+									}
 								}
 							}
 						}
 					}
 
 					namesForType[n.Name] = true
-					if renamedConstants[n.Name] != "" {
-						newName := renamedConstants[n.Name]
-						namesForType[newName] = true
+					if n.Obj == nil {
+						//store the value
+						val := constMap[n.Name]
+						namesForType[val] = true
 					}
 				}
 			}
@@ -141,8 +141,7 @@ func (c constVal) String() string {
 
 var allPkgs sync.Map
 
-// TODO: do this by storing analysis.Facts about all the consts in each package?
-func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
+func initializeAllPkgs(pass *analysis.Pass) {
 	var visit func(pkg *types.Package)
 	visit = func(pkg *types.Package) {
 		if _, ok := allPkgs.Load(pkg); ok {
@@ -154,6 +153,11 @@ func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
 		}
 	}
 	visit(pass.Pkg)
+}
+
+// TODO: do this by storing analysis.Facts about all the consts in each package?
+func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
+	initializeAllPkgs(pass)
 	consts := []constVal{}
 	allPkgs.Range(func(pkgKey, _ interface{}) bool {
 		pkg := pkgKey.(*types.Package)
@@ -169,4 +173,23 @@ func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
 		return true
 	})
 	return consts
+}
+
+func buildConstMap(pass *analysis.Pass, targetType string) map[string]string {
+	initializeAllPkgs(pass)
+	constMap := map[string]string{}
+	allPkgs.Range(func(pkgKey, _ interface{}) bool {
+		pkg := pkgKey.(*types.Package)
+		for _, name := range pkg.Scope().Names() {
+			if namedConst, ok := pkg.Scope().Lookup(name).(*types.Const); ok {
+				val := unquote(namedConst.Val().ExactString())
+				typeName := namedConst.Type().String()
+				if typeName == targetType {
+					constMap[namedConst.Name()] = val
+				}
+			}
+		}
+		return true
+	})
+	return constMap
 }
