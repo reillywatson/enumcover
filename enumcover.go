@@ -71,7 +71,7 @@ func fullTypeName(pass *analysis.Pass, file *ast.File, n ast.Node, typeName stri
 }
 
 func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
-	constMap := buildConstMap(pass, typeName)
+	allConsts := buildAllConstMap(pass, typeName)
 	namesForType := map[string]bool{}
 	ast.Inspect(n, func(n ast.Node) bool {
 		if expr, ok := n.(ast.Expr); ok {
@@ -81,38 +81,19 @@ func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
 				case *ast.BasicLit:
 					namesForType[unquote(n.Value)] = true
 				case *ast.Ident:
-					if n.Obj != nil {
-						if n.Obj.Kind == ast.Con {
-							if decl, ok := n.Obj.Decl.(*ast.ValueSpec); ok {
-								for _, value := range decl.Values {
-									if lit, ok := value.(*ast.BasicLit); ok {
-										namesForType[unquote(lit.Value)] = true
-									}
-									if lit, ok := value.(*ast.Ident); ok {
-										namesForType[lit.Name] = true
-									}
-								}
-							}
-						}
-					}
-
-					namesForType[n.Name] = true
-					if n.Obj == nil {
-						//store the value
-						val := constMap[n.Name]
-						namesForType[val] = true
-					}
+					namedConst := allConsts[n.Name]
+					namesForType[namedConst.val] = true
 				}
 			}
 		}
 		return true
 	})
-	allConsts := allConstsWithType(pass, typeName)
+
 	if len(allConsts) == 0 {
 		reportNodef(pass, n, "No consts found for type %v", typeName)
 	}
 	for _, want := range allConsts {
-		if !namesForType[want.name] && !namesForType[want.val] {
+		if !namesForType[want.val] {
 			reportNodef(pass, n, "Unhandled const: %v", want)
 		}
 	}
@@ -156,9 +137,9 @@ func initializeAllPkgs(pass *analysis.Pass) {
 }
 
 // TODO: do this by storing analysis.Facts about all the consts in each package?
-func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
+func buildAllConstMap(pass *analysis.Pass, targetType string) map[string]constVal {
 	initializeAllPkgs(pass)
-	consts := []constVal{}
+	constMap := map[string]constVal{}
 	allPkgs.Range(func(pkgKey, _ interface{}) bool {
 		pkg := pkgKey.(*types.Package)
 		for _, name := range pkg.Scope().Names() {
@@ -166,26 +147,7 @@ func allConstsWithType(pass *analysis.Pass, targetType string) []constVal {
 				val := unquote(namedConst.Val().ExactString())
 				typeName := namedConst.Type().String()
 				if typeName == targetType {
-					consts = append(consts, constVal{name: namedConst.Name(), val: val})
-				}
-			}
-		}
-		return true
-	})
-	return consts
-}
-
-func buildConstMap(pass *analysis.Pass, targetType string) map[string]string {
-	initializeAllPkgs(pass)
-	constMap := map[string]string{}
-	allPkgs.Range(func(pkgKey, _ interface{}) bool {
-		pkg := pkgKey.(*types.Package)
-		for _, name := range pkg.Scope().Names() {
-			if namedConst, ok := pkg.Scope().Lookup(name).(*types.Const); ok {
-				val := unquote(namedConst.Val().ExactString())
-				typeName := namedConst.Type().String()
-				if typeName == targetType {
-					constMap[namedConst.Name()] = val
+					constMap[namedConst.Name()] = constVal{name: namedConst.Name(), val: val}
 				}
 			}
 		}
