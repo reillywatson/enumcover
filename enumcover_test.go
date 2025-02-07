@@ -9,5 +9,5 @@ import (
 
 func Test(t *testing.T) {
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, enumcover.Analyzer, "constdecl", "imported", "renamedimport", "stringenum")
+	analysistest.Run(t, testdata, enumcover.Analyzer, "constdecl", "imported", "malformedcomment", "renamedimport", "stringenum")
 }

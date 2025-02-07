@@ -36,6 +36,8 @@ func enumcoverCheck(pass *analysis.Pass) (interface{}, error) {
 					if len(matches) == 1 && len(matches[0]) == 2 {
 						typeName := fullTypeName(pass, file, n, strings.TrimSpace(matches[0][1]))
 						checkConsts(pass, n, typeName)
+					} else if strings.Contains(comment.Text, "enumcover:") {
+						reportNodef(pass, comment, "Malformed enumcover comment (should be of the form \"enumcover:sometypename\"): %v", comment.Text)
 					}
 				}
 			}
