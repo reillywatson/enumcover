@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: cimg/go:1.21
+      - image: cimg/go:1.25
     working_directory: ~/github.com/reillywatson/enumcover
     steps:
       - checkout
