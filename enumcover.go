@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
@@ -21,30 +20,49 @@ var Analyzer = &analysis.Analyzer{
 	Run:      enumcoverCheck,
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 }
+
 var commentRegex = regexp.MustCompile(`enumcover:([\w\.]+)`)
 
-func enumcoverCheck(pass *analysis.Pass) (interface{}, error) {
+func enumcoverCheck(pass *analysis.Pass) (any, error) {
+	var index *constIndex
+
 	for _, file := range pass.Files {
+		if !fileHasEnumcoverDirective(file) {
+			continue
+		}
+
 		commentMap := ast.NewCommentMap(pass.Fset, file, file.Comments)
-		ast.Inspect(file, func(n ast.Node) bool {
-			if n == nil {
-				return true
-			}
-			for _, comments := range commentMap[n] {
-				for _, comment := range comments.List {
-					matches := commentRegex.FindAllStringSubmatch(comment.Text, 1)
-					if len(matches) == 1 && len(matches[0]) == 2 {
-						typeName := fullTypeName(pass, file, n, strings.TrimSpace(matches[0][1]))
-						checkConsts(pass, n, typeName)
+		for n, groups := range commentMap {
+			for _, group := range groups {
+				for _, comment := range group.List {
+					match := commentRegex.FindStringSubmatch(comment.Text)
+					if len(match) == 2 {
+						if index == nil {
+							builtIndex := newConstIndex(pass)
+							index = &builtIndex
+						}
+						typeName := fullTypeName(pass, file, n, strings.TrimSpace(match[1]))
+						checkConsts(pass, n, typeName, *index)
 					} else if strings.Contains(comment.Text, "enumcover:") {
 						reportNodef(pass, comment, "Malformed enumcover comment (should be of the form \"enumcover:sometypename\"): %v", comment.Text)
 					}
 				}
 			}
-			return true
-		})
+		}
 	}
+
 	return nil, nil
+}
+
+func fileHasEnumcoverDirective(file *ast.File) bool {
+	for _, group := range file.Comments {
+		for _, comment := range group.List {
+			if strings.Contains(comment.Text, "enumcover:") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func fullTypeName(pass *analysis.Pass, file *ast.File, n ast.Node, typeName string) string {
@@ -72,18 +90,30 @@ func fullTypeName(pass *analysis.Pass, file *ast.File, n ast.Node, typeName stri
 	return typeName
 }
 
-func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
-	allConsts := buildAllConstMap(pass, typeName)
+func checkConsts(pass *analysis.Pass, n ast.Node, typeName string, index constIndex) {
+	allConsts := index.constsForType(typeName)
 	namesForType := map[string]bool{}
+
 	ast.Inspect(n, func(n ast.Node) bool {
-		if expr, ok := n.(ast.Expr); ok {
-			t := pass.TypesInfo.TypeOf(expr)
-			if t != nil && t.String() == typeName {
-				switch n := n.(type) {
-				case *ast.BasicLit:
-					namesForType[unquote(n.Value)] = true
-				case *ast.Ident:
-					namedConst := allConsts[n.Name]
+		expr, ok := n.(ast.Expr)
+		if !ok {
+			return true
+		}
+		t := pass.TypesInfo.TypeOf(expr)
+		if t == nil || t.String() != typeName {
+			return true
+		}
+
+		switch n := n.(type) {
+		case *ast.BasicLit:
+			namesForType[unquote(n.Value)] = true
+		case *ast.Ident:
+			if namedConst, ok := allConsts[n.Name]; ok {
+				namesForType[namedConst.val] = true
+			}
+		case *ast.SelectorExpr:
+			if n.Sel != nil {
+				if namedConst, ok := allConsts[n.Sel.Name]; ok {
 					namesForType[namedConst.val] = true
 				}
 			}
@@ -101,7 +131,7 @@ func checkConsts(pass *analysis.Pass, n ast.Node, typeName string) {
 	}
 }
 
-func reportNodef(pass *analysis.Pass, node ast.Node, format string, args ...interface{}) {
+func reportNodef(pass *analysis.Pass, node ast.Node, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	pass.Report(analysis.Diagnostic{Pos: node.Pos(), End: node.End(), Message: msg})
 }
@@ -122,38 +152,57 @@ func (c constVal) String() string {
 	return fmt.Sprintf("%s (%s)", c.name, c.val)
 }
 
-var allPkgs sync.Map
+type constIndex struct {
+	byType map[string]map[string]constVal
+}
 
-func initializeAllPkgs(pass *analysis.Pass) {
+func newConstIndex(pass *analysis.Pass) constIndex {
+	index := constIndex{byType: map[string]map[string]constVal{}}
+	seenPkgs := map[*types.Package]struct{}{}
+
 	var visit func(pkg *types.Package)
 	visit = func(pkg *types.Package) {
-		if _, ok := allPkgs.Load(pkg); ok {
+		if pkg == nil {
 			return
 		}
-		allPkgs.Store(pkg, struct{}{})
+		if _, ok := seenPkgs[pkg]; ok {
+			return
+		}
+		seenPkgs[pkg] = struct{}{}
+
+		scope := pkg.Scope()
+		if scope != nil {
+			for _, name := range scope.Names() {
+				namedConst, ok := scope.Lookup(name).(*types.Const)
+				if !ok {
+					continue
+				}
+				typeName := namedConst.Type().String()
+				constsForType := index.byType[typeName]
+				if constsForType == nil {
+					constsForType = map[string]constVal{}
+					index.byType[typeName] = constsForType
+				}
+				constsForType[namedConst.Name()] = constVal{
+					name: namedConst.Name(),
+					val:  unquote(namedConst.Val().ExactString()),
+				}
+			}
+		}
+
 		for _, imp := range pkg.Imports() {
 			visit(imp)
 		}
 	}
+
 	visit(pass.Pkg)
+	return index
 }
 
-// TODO: do this by storing analysis.Facts about all the consts in each package?
-func buildAllConstMap(pass *analysis.Pass, targetType string) map[string]constVal {
-	initializeAllPkgs(pass)
-	constMap := map[string]constVal{}
-	allPkgs.Range(func(pkgKey, _ interface{}) bool {
-		pkg := pkgKey.(*types.Package)
-		for _, name := range pkg.Scope().Names() {
-			if namedConst, ok := pkg.Scope().Lookup(name).(*types.Const); ok {
-				val := unquote(namedConst.Val().ExactString())
-				typeName := namedConst.Type().String()
-				if typeName == targetType {
-					constMap[namedConst.Name()] = constVal{name: namedConst.Name(), val: val}
-				}
-			}
-		}
-		return true
-	})
-	return constMap
+func (i constIndex) constsForType(typeName string) map[string]constVal {
+	consts := i.byType[typeName]
+	if consts == nil {
+		return map[string]constVal{}
+	}
+	return consts
 }
